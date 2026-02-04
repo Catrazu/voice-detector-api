@@ -1,19 +1,19 @@
-from fastapi import Header, HTTPException
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-API_KEY = "demo_api_key_123"
+security = HTTPBearer()
+
+API_KEY = "mysecretkey"
 
 def verify_api_key(
-    authorization: str = Header(None),
-    Authorization: str = Header(None)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    token = Authorization or authorization
+    if credentials.credentials != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API Key"
+        )
+    return credentials.credentials
 
-    if token is None:
-        raise HTTPException(status_code=401, detail="Authorization header missing")
-
-    if token != f"Bearer {API_KEY}":
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    return token
 
 
