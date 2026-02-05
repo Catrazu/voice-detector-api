@@ -51,6 +51,7 @@ def detect_voice(
         or data.get("audio_base64_format")
         or data.get("audioBase64Format")
         or data.get("AudioBase64Format")
+        or data.get("Audio Base64 Format")
     )
 
     audio_url = data.get("audio_url")
