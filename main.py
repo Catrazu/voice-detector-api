@@ -24,15 +24,15 @@ app = FastAPI(
 # AUTH
 # ============================
 
-def verify_api_key(authorization: str = Header(...)):
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+from fastapi import Header
 
-    token = authorization.replace("Bearer ", "")
-    if token != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+API_KEY = "mysecretkey"
 
-    return token
+def verify_api_key(x_api_key: str = Header(...)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return x_api_key
+
 
 # ============================
 # ROOT
