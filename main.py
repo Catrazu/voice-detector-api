@@ -1,92 +1,85 @@
 import base64
 import uuid
-import os
 import requests
+import os
 
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException
 from schemas import AudioRequest, DetectionResponse
+from auth import verify_api_key
 from audio_utils import convert_mp3_to_wav
 from features import extract_mfcc_features
 
-# ============================
-# CONFIG
-# ============================
-
-API_KEY = "mysecretkey"   # you can change later
-
 app = FastAPI(
-    title="AI-Generated Voice Detection API",
-    description="Detect whether voice is AI-generated or Human",
+    title="AI Voice Detection API",
+    description="Detect AI-generated vs Human voice from Base64 audio or Audio URL",
     version="1.0"
 )
 
-# ============================
-# AUTH
-# ============================
-
-from fastapi import Header
-
-API_KEY = "mysecretkey"
-
-def verify_api_key(x_api_key: str = Header(...)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-    return x_api_key
-
-
-# ============================
-# ROOT
-# ============================
-
+# -------------------------------
+# Root Health Check
+# -------------------------------
 @app.get("/")
 def root():
-    return {
-        "status": "running",
-        "message": "AI Voice Detection API is live"
-    }
+    return {"message": "AI Voice Detection API Running"}
 
-# ============================
-# DETECTION ENDPOINT
-# ============================
-
+# -------------------------------
+# Detect Endpoint
+# -------------------------------
 @app.post("/detect", response_model=DetectionResponse)
 def detect_voice(
-    data: AudioRequest,
+    data: dict,
     api_key: str = Depends(verify_api_key)
 ):
+
     allowed_languages = ["English", "Hindi", "Tamil", "Malayalam", "Telugu"]
 
-    if data.language not in allowed_languages:
+    language = data.get("language")
+
+    if language not in allowed_languages:
         raise HTTPException(status_code=400, detail="Unsupported language")
 
-    # --------- GET AUDIO ----------
-    if data.audio_base64:
+    audio_base64 = data.get("audio_base64") or data.get("audio_base64_format")
+    audio_url = data.get("audio_url")
+
+    # -------------------------------
+    # Case 1: Base64 Audio
+    # -------------------------------
+    if audio_base64:
         try:
-            audio_bytes = base64.b64decode(data.audio_base64)
+            audio_bytes = base64.b64decode(audio_base64)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid Base64 audio")
 
-    elif data.audio_url:
-        import requests
+    # -------------------------------
+    # Case 2: Audio URL
+    # -------------------------------
+    elif audio_url:
         try:
-            r = requests.get(data.audio_url)
-            audio_bytes = r.content
-        except:
-            raise HTTPException(status_code=400, detail="Invalid audio URL")
+            response = requests.get(audio_url)
+            audio_bytes = response.content
+        except Exception:
+            raise HTTPException(status_code=400, detail="Unable to download audio")
 
     else:
         raise HTTPException(status_code=400, detail="Provide audio_base64 or audio_url")
 
-    # --------- SAVE FILE ----------
+    # -------------------------------
+    # Save MP3
+    # -------------------------------
     mp3_file = f"audio_{uuid.uuid4()}.mp3"
+
     with open(mp3_file, "wb") as f:
         f.write(audio_bytes)
 
+    # Convert to WAV
     wav_file = convert_mp3_to_wav(mp3_file)
 
+    # Extract Features
     mfccs = extract_mfcc_features(wav_file)
 
-    # --------- CLASSIFICATION ----------
+    # -------------------------------
+    # Simple Rule-Based Classifier
+    # -------------------------------
     if mfccs.var() > 1000:
         result = "HUMAN"
         confidence = 0.95
@@ -96,12 +89,20 @@ def detect_voice(
         confidence = 0.85
         explanation = "Lower spectral variance indicates synthetic voice patterns"
 
+    # Cleanup files
+    try:
+        os.remove(mp3_file)
+        os.remove(wav_file)
+    except:
+        pass
+
     return DetectionResponse(
         result=result,
         confidence=confidence,
-        language=data.language,
+        language=language,
         explanation=explanation
     )
+
 
 
 
