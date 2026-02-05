@@ -59,69 +59,50 @@ def detect_voice(
     if data.language not in allowed_languages:
         raise HTTPException(status_code=400, detail="Unsupported language")
 
-    # ------------------------
-    # Get Audio Bytes
-    # ------------------------
-
-    if data.audio_url:
-        try:
-            response = requests.get(data.audio_url)
-            audio_bytes = response.content
-        except:
-            raise HTTPException(status_code=400, detail="Unable to download audio from URL")
-
-    elif data.audio_base64:
+    # --------- GET AUDIO ----------
+    if data.audio_base64:
         try:
             audio_bytes = base64.b64decode(data.audio_base64)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="Invalid Base64 audio")
+
+    elif data.audio_url:
+        import requests
+        try:
+            r = requests.get(data.audio_url)
+            audio_bytes = r.content
+        except:
+            raise HTTPException(status_code=400, detail="Invalid audio URL")
 
     else:
         raise HTTPException(status_code=400, detail="Provide audio_base64 or audio_url")
 
-    # ------------------------
-    # Save MP3
-    # ------------------------
-
+    # --------- SAVE FILE ----------
     mp3_file = f"audio_{uuid.uuid4()}.mp3"
-    wav_file = None
+    with open(mp3_file, "wb") as f:
+        f.write(audio_bytes)
 
-    try:
-        with open(mp3_file, "wb") as f:
-            f.write(audio_bytes)
+    wav_file = convert_mp3_to_wav(mp3_file)
 
-        # Convert to WAV
-        wav_file = convert_mp3_to_wav(mp3_file)
+    mfccs = extract_mfcc_features(wav_file)
 
-        # Extract Features
-        mfccs = extract_mfcc_features(wav_file)
+    # --------- CLASSIFICATION ----------
+    if mfccs.var() > 1000:
+        result = "HUMAN"
+        confidence = 0.95
+        explanation = "Higher MFCC variance and natural spectral variation indicate human voice"
+    else:
+        result = "AI_GENERATED"
+        confidence = 0.85
+        explanation = "Lower spectral variance indicates synthetic voice patterns"
 
-        # ------------------------
-        # SIMPLE HEURISTIC MODEL
-        # ------------------------
+    return DetectionResponse(
+        result=result,
+        confidence=confidence,
+        language=data.language,
+        explanation=explanation
+    )
 
-        if mfccs.var() > 1000:
-            result = "HUMAN"
-            confidence = 0.95
-            explanation = "Higher MFCC variance and natural spectral variation indicate human voice"
-        else:
-            result = "AI_GENERATED"
-            confidence = 0.85
-            explanation = "Lower spectral variance indicates synthetic voice patterns"
-
-        return DetectionResponse(
-            result=result,
-            confidence=confidence,
-            language=data.language,
-            explanation=explanation
-        )
-
-    finally:
-        # Cleanup files
-        if mp3_file and os.path.exists(mp3_file):
-            os.remove(mp3_file)
-        if wav_file and os.path.exists(wav_file):
-            os.remove(wav_file)
 
 
 

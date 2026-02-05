@@ -12,3 +12,4 @@ class DetectionResponse(BaseModel):
     language: str
     explanation: str
 
+
