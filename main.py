@@ -39,10 +39,12 @@ def detect_voice(
         raise HTTPException(status_code=400, detail="Unsupported language")
 
     audio_base64 = (
-        data.get("audio_base64")
-        or data.get("audioBase64Format")
-        or data.get("audio_base64_format")
-    )
+    data.get("audio_base64")
+    or data.get("audio_base64_format")
+    or data.get("audioBase64Format")
+    or data.get("AudioBase64Format")
+)
+
 
     audio_url = data.get("audio_url")
 
